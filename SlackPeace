@@ -1,0 +1,417 @@
+import pygame
+
+WIDTH = 1200
+HEIGHT = 800
+SIZE = (WIDTH, HEIGHT)
+
+
+class Player(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.x_velocity = 0
+        self.y_velocity = 55
+        self.speed = 5
+        self.boost_speed = 5
+        self.jumpPower = 17
+        self.gravity = 1
+        self.onGround = False
+
+        self.invincibleTimer = 0
+        self.invincible = False
+
+        self.playerIdle = pygame.image.load('Images\\player-idle.png')
+        self.playerMove = ([pygame.image.load('Images\\player-move-right0.png'),
+                            pygame.image.load('Images\\player-move-right1.png')],
+                           [pygame.image.load('Images\\player-move-left0.png'),
+                            pygame.image.load('Images\\player-move-left1.png')])
+        self.image = self.playerIdle
+        self.rect = self.image.get_rect()
+        self.animation = 0
+
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+        self.rect.x = 10 + self.width
+        self.rect.y = HEIGHT - (self.height + 350)
+        self.startX = self.rect.x
+        self.startY = self.rect.y
+
+        self.hp = 5
+        self.coins = 0
+        self.coin = pygame.image.load('Images\\big_coin.png')
+        self.heart = pygame.image.load('Images\\heart.png')
+
+        self.sounds = {'jump': pygame.mixer.Sound('Sounds\\jump.wav'),
+                       'coin_pickup': pygame.mixer.Sound('Sounds\\collect_coin.wav'),
+                       'heart_pickup': pygame.mixer.Sound('Sounds\\heart.wav'),
+                       'slug_hit': pygame.mixer.Sound('Sounds\\slug_hit.wav')}
+        self.sounds['jump'].set_volume(0.05)
+        self.sounds['coin_pickup'].set_volume(0.05)
+        self.sounds['heart_pickup'].set_volume(0.05)
+
+    def update(self, left, right, up, boost, pads, collectable_objects, enemies, door):
+        if left:
+            if boost:
+                self.x_velocity = -(self.speed + self.boost_speed)
+
+            else:
+                self.x_velocity = -self.speed
+
+            self.image = self.playerMove[1][self.animation // 30]
+
+        if right:
+            if boost:
+                self.x_velocity = self.speed + self.boost_speed
+
+            else:
+                self.x_velocity = self.speed
+
+            self.image = self.playerMove[0][self.animation // 30]
+
+        if up:
+            if self.onGround:
+                self.y_velocity = -self.jumpPower
+                self.boost_speed = 0
+
+                self.sounds['jump'].play()
+
+        if not self.onGround:
+            self.y_velocity += self.gravity
+
+        if not (right or left):
+            self.x_velocity = 0
+            self.image = self.playerIdle
+
+        if self.animation + 1 >= 60:
+            self.animation = 0
+
+        if self.rect.y >= HEIGHT + 10:
+            self.rect.y = self.startY
+            self.rect.x = self.startX
+            self.hp -= 1
+
+        self.onGround = False
+
+        self.rect.y += self.y_velocity
+        self.collide(0, self.y_velocity, pads, collectable_objects, enemies, door)
+
+        self.rect.x += self.x_velocity
+        self.collide(self.x_velocity, 0, pads, collectable_objects, enemies, door)
+
+        self.animation += 1
+        if self.invincible:
+            self.invincibleTimer -= 0.01
+
+        if self.invincibleTimer <= 0:
+            self.invincible = False
+            self.invincibleTimer = 0
+
+        print_text(text=str(self.hp), text_color=(255, 0, 0),
+                   font_name='Fonts\\font2.ttf', x=50, y=5, font_size=35)
+        display.blit(self.heart, (15, 10))
+
+        print_text(text=str(self.coins), text_color=(255, 255, 0),
+                   font_name='Fonts\\font2.ttf', x=50, y=50, font_size=35)
+        display.blit(self.coin, (15, 55))
+
+        # pygame.draw.rect(display, (255, 255, 255), self.rect, 2)
+
+    def collide(self, x_velocity, y_velocity, pads, collectable_objects, enemies, door):
+        global is_run
+
+        for pad in pads:
+            if pygame.sprite.collide_rect(self, pad):
+
+                if x_velocity > 0:
+                    self.rect.right = pad.rect.left
+
+                if x_velocity < 0:
+                    self.rect.left = pad.rect.right
+
+                if y_velocity > 0:
+                    self.rect.bottom = pad.rect.top
+                    self.onGround = True
+                    self.boost_speed = 5
+                    self.y_velocity = 0
+
+                if self.y_velocity < 0:
+                    self.rect.top = pad.rect.bottom
+                    self.y_velocity = 0
+
+        for coin in collectable_objects['coins']:
+            if pygame.sprite.collide_rect(self, coin):
+                game_elements.remove(coin)
+                collectable_objects['coins']. remove(coin)
+                self.coins += 1
+
+                self.sounds['coin_pickup'].play()
+
+        for heart in collectable_objects['hearts']:
+            if pygame.sprite.collide_rect(self, heart):
+                game_elements.remove(heart)
+                collectable_objects['hearts'].remove(heart)
+                self.hp += 1
+
+                self.sounds['heart_pickup'].play()
+
+        for slug in enemies:
+            if pygame.sprite.collide_rect(self, slug):
+                # self.rect.y = self.startY
+                # self.rect.x = self.startX
+                if not self.invincible:
+                    self.invincible = True
+                    self.invincibleTimer = 1
+                    self.hp -= 1
+
+                    self.sounds['slug_hit'].play()
+
+        if pygame.sprite.collide_rect(self, door):
+            print('Ты победил!')
+            is_run = False
+
+
+class Slug(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load('Images\\slug.png')
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+        self.rect = pygame.Rect(x, y, self.width, self.height)
+
+        self.speed = 1
+
+        self.animation = 0
+        self.moving = [pygame.image.load('Images\\slug.png'), pygame.image.load('Images\\slug2.png')]
+
+    def update(self, pads):
+        if self.rect.x < 375 or self.rect.x >= WIDTH - 200:
+            self.speed *= -1
+
+        self.rect.x += self.speed
+        # pygame.draw.rect(display, (255, 255, 255), self.rect, 2)
+
+        if self.animation + 1 >= 30:
+            self.animation = 0
+
+        self.image = self.moving[self.animation // 15]
+
+        self.animation += 1
+
+
+class Pad(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load('Images\\pad.png')
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+        self.rect = pygame.Rect(x, y, self.width, self.height)
+
+
+class Coin(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load('Images\\coin.png')
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+        self.rect = pygame.Rect(x, y, self.width, self.height)
+
+        self.animation = 0
+        self.coin_rotation = [pygame.image.load('Images\\coin.png'), pygame.image.load('Images\\coin2.png'),
+                              pygame.image.load('Images\\coin3.png'), pygame.image.load('Images\\coin4.png')]
+
+    def update(self):
+        if self.animation + 1 >= 40:
+            self.animation = 0
+
+        self.image = self.coin_rotation[self.animation // 10]
+
+        self.animation += 1
+
+
+class Heart(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load('Images\\small-heart.png')
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+        self.rect = pygame.Rect(x, y,  self.width, self.height)
+
+        self.animation = 0
+        self.coin_rotation = [pygame.image.load('Images\\small-heart.png'),
+                              pygame.image.load('Images\\small-heart5.png')]
+
+    def update(self):
+        if self.animation + 1 >= 60:
+            self.animation = 0
+
+        self.image = self.coin_rotation[self.animation // 30]
+
+        self.animation += 1
+
+
+def print_text(font_name='Images\\font2.ttf', font_size=20, text='', text_color=(0, 0, 0), x=0, y=0):
+    font = pygame.font.Font(font_name, font_size)
+    text = font.render(text, False, text_color)
+    display.blit(text, (x, y))
+
+
+def main():
+    global game_elements, display, is_run
+
+    pygame.init()
+
+    display = pygame.display.set_mode(SIZE)
+    pygame.display.set_caption('Slack Peace')
+
+    clock = pygame.time.Clock()
+
+    bg = pygame.image.load('Images\\background.png')
+    # border = pygame.image.load('border.png')
+
+    player = Player()
+
+    left = right = up = boost = False
+
+    game_elements = pygame.sprite.Group()
+    pads = []
+    collectable_objects = {'coins': [], 'hearts': []}
+    enemies = []
+    game_elements.add(player)
+
+    level = [
+        '',
+        '                                              ',
+        '                                              ! ',
+        '         ***************                    ----',
+        '         ***************                      ',
+        '                                               ',
+        '         ---------------     ----------         ',
+        '**                    +      **              ',
+        '**                    --     --               ',
+        '**                                            ',
+        '---                                           ',
+        '                                              ',
+        '                                               ',
+        '***                                             ',
+        '---                                           ',
+        '                  ******        ******                ',
+        '                  ------        ------          ',
+        '                                              ',
+        '      ---                                      ',
+        '                   @      @          @       ',
+        '               --------------------------    ',
+        '                                              ',
+        '                                              ',
+        '                                                ',
+        '                                            ----',
+        '                                                 ',
+        '                                              ',
+        '                       **              ',
+        '----------------       --      ---------      '
+    ]
+
+    x = y = 0
+
+    for row in level:
+        for element in row:
+            if element == '-':
+                pad = Pad(x, y)
+                game_elements.add(pad)
+                pads.append(pad)
+
+            if element == '*':
+                coin = Coin(x, y + 5)
+                game_elements.add(coin)
+                collectable_objects['coins'].append(coin)
+
+            if element == '+':
+                heart = Heart(x, y + 5)
+                game_elements.add(heart)
+                collectable_objects['hearts'].append(heart)
+
+            if element == '@':
+                slug = Slug(x, y + 7)
+                game_elements.add(slug)
+                enemies.append(slug)
+
+            if element == '!':
+                door = pygame.sprite.Sprite()
+                door.image = pygame.image.load('Images\\door.png')
+                door.image = pygame.transform.scale(door.image, (50, 80))
+                door.rect = pygame.Rect(x - 20, y - 50, door.image.get_width(), door.image.get_height())
+                game_elements.add(door)
+
+            x += 25
+        y += 28
+        x = 0
+
+    is_run = True
+
+    pygame.mixer.music.load('Sounds\\background.mp3')
+    pygame.mixer.music.set_volume(0.1)
+    pygame.mixer.music.play(loops=-1)
+
+    while is_run:
+        clock.tick(60)
+
+        display.blit(bg, (0, 0))
+
+        player.update(left, right, up, boost, pads, collectable_objects, enemies, door)
+        game_elements.draw(display)
+
+        for coin in collectable_objects['coins']:
+            coin.update()
+            # pygame.draw.rect(display, (255, 255, 255), coin.rect, 2)
+
+        for heart in collectable_objects['hearts']:
+            heart.update()
+            # pygame.draw.rect(display, (255, 255, 255), heart.rect, 2)
+
+        # for pad in pads:
+        #     pygame.draw.rect(display, (255, 255, 255), pad.rect, 2)
+
+        for enemy in enemies:
+            enemy.update(pads)
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_a]:
+            left = True
+
+        else:
+            left = False
+
+        if keys[pygame.K_d]:
+            right = True
+
+        else:
+            right = False
+
+        if keys[pygame.K_SPACE]:
+            up = True
+
+        else:
+            up = False
+
+        if keys[pygame.K_LSHIFT]:
+            boost = True
+
+        else:
+            boost = False
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                is_run = False
+
+        if player.hp <= 0:
+            print('Ты проиграл!')
+            is_run = False
+
+        print_text(text='Made by Valeriy Gladyshev :D', font_name='Fonts\\font.otf', font_size=10, text_color=(0, 0, 255),
+                   x=WIDTH - 155, y=HEIGHT - 10)
+
+        pygame.display.flip()
+
+    pygame.quit()
+
+
+if __name__ == '__main__':
+    main()
